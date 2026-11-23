@@ -19,10 +19,10 @@ app = FastAPI(title="KhmerDub Studio API", lifespan=lifespan)
 # CORS for frontend
 app.add_middleware(
     CORSMiddleware,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_origins=[
         "http://localhost:3000",
         "http://localhost:3002",
-        "https://rc-studio-sigma.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],

@@ -1,12 +1,43 @@
 /**
  * Typed API client for KhmerDub Studio
- * Wraps fetch with base URL from NEXT_PUBLIC_API_URL
+ * Wraps fetch with base URL from localStorage (RCSTUDIO_BACKEND_URL) -> NEXT_PUBLIC_API_URL -> http://127.0.0.1:8000
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? '';
+const DEFAULT_BACKEND_URL = 'http://127.0.0.1:8001';
+
+function resolveBackendUrl(): string {
+  if (typeof window !== 'undefined') {
+    const saved = window.localStorage.getItem('RCSTUDIO_BACKEND_URL');
+    if (saved) return saved;
+  }
+  const fromEnv = process.env.NEXT_PUBLIC_API_URL;
+  if (fromEnv) return fromEnv;
+  return DEFAULT_BACKEND_URL;
+}
+
+let API_BASE_URL = resolveBackendUrl();
 
 if (!API_BASE_URL) {
   console.warn('NEXT_PUBLIC_API_URL is not set. API calls will fail.');
+}
+
+export function setBackendUrl(url: string): void {
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem('RCSTUDIO_BACKEND_URL', url);
+  }
+  API_BASE_URL = url;
+}
+
+export function getBackendUrl(): string {
+  return API_BASE_URL;
+}
+
+export function getWsUrl(): string {
+  let base = API_BASE_URL;
+  if (base.endsWith('/')) base = base.slice(0, -1);
+  if (base.startsWith('https://')) return `wss://${base.replace('https://', '')}`;
+  if (base.startsWith('http://')) return `ws://${base.replace('http://', '')}`;
+  return `ws://${base}`;
 }
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -36,7 +67,6 @@ class ApiError extends Error {
 
 async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, headers = {}, signal } = options;
-
   const url = `${API_BASE_URL}${endpoint}`;
 
   const fetchOptions: RequestInit = {
@@ -69,7 +99,6 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
       );
     }
 
-    // Handle 204 No Content
     if (response.status === 204) {
       return undefined as T;
     }
@@ -79,7 +108,6 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
     if (error instanceof ApiError) {
       throw error;
     }
-    // Network or other errors
     throw new ApiError(0, error instanceof Error ? error.message : 'Unknown error');
   }
 }
@@ -121,38 +149,23 @@ export interface CreateDownloadResponse {
   status: string;
 }
 
-// Download Hub API methods
 export const downloadApi = {
-  // List all download jobs for current project (returns assets, adapt to jobs)
   list: (projectId?: string): Promise<DownloadJob[]> => {
     const params = projectId ? `?project_id=${projectId}` : '';
-    // Note: backend returns assets, not jobs. We'll need to adapt or create a jobs endpoint.
-    // For now, use the assets endpoint and transform.
     return api.get<DownloadJob[]>(`/api/download/project/${projectId || 'default'}/assets${params}`);
   },
-
-  // Create a new download job
   create: (data: CreateDownloadRequest): Promise<CreateDownloadResponse> =>
     api.post<CreateDownloadResponse>('/api/download/start', data),
-
-  // Get a specific download job
   get: (jobId: string): Promise<DownloadJob> =>
     api.get<DownloadJob>(`/api/download/job/${jobId}`),
-
-  // Get download job status (for polling) - backend uses /job/{job_id}
   getStatus: (jobId: string): Promise<Pick<DownloadJob, 'status' | 'progress' | 'message'>> =>
     api.get<Pick<DownloadJob, 'status' | 'progress' | 'message'>>(`/api/download/job/${jobId}`),
-
-  // Cancel a download job - not implemented in backend yet
   cancel: (jobId: string): Promise<void> =>
     api.post<void>(`/api/download/job/${jobId}/cancel`, {}),
-
-  // Delete a download job - not implemented in backend yet
   delete: (jobId: string): Promise<void> =>
     api.delete<void>(`/api/download/job/${jobId}`),
 };
 
-// Project API types
 export interface Project {
   id: string;
   name: string;
@@ -168,20 +181,15 @@ export interface CreateProjectResponse {
   project: Project;
 }
 
-// Project API methods
 export const projectApi = {
   list: (): Promise<Project[]> =>
     api.get<Project[]>('/api/projects'),
-
   create: (data: CreateProjectRequest): Promise<CreateProjectResponse> =>
     api.post<CreateProjectResponse>('/api/projects', data),
-
   get: (projectId: string): Promise<Project> =>
     api.get<Project>(`/api/projects/${projectId}`),
-
   update: (projectId: string, data: Partial<CreateProjectRequest>): Promise<Project> =>
     api.patch<Project>(`/api/projects/${projectId}`, data),
-
   delete: (projectId: string): Promise<void> =>
     api.delete<void>(`/api/projects/${projectId}`),
 };

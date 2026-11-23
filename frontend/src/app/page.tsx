@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
@@ -23,9 +23,13 @@ import {
   ChevronRight,
   Sliders,
   Trash2,
-  XCircle
+  XCircle,
+  Server,
+  Wifi,
+  WifiOff,
+  Save
 } from 'lucide-react';
-import { api, downloadApi, DownloadJob, CreateDownloadRequest, ApiError } from '@/lib/api';
+import { api, downloadApi, DownloadJob, CreateDownloadRequest, ApiError, getBackendUrl, setBackendUrl } from '@/lib/api';
 
 export default function AppShell() {
   const [activeTab, setActiveTab] = useState<'download' | 'translate' | 'overlay' | 'export' | 'publish'>('download');
@@ -49,13 +53,13 @@ export default function AppShell() {
 
   // Translate & Dub Studio state
   const [transcriptLines, setTranscriptLines] = useState([
-    { id: 'line-1', start: '00:01:20', end: '00:01:25', speaker: 'Speaker 1', source: '总裁驾驶Kawasaki H2去见李明', display: 'ប្រធានក្រុមហ៊ុន驾驶Kawasaki H2去见李明', tts_status: 'pending' },
-    { id: 'line-2', start: '00:01:25', end: '00:01:30', speaker: 'Speaker 2', source: '我们必须在VIP会议室开会', display: 'យើងត្រូវតែប្រជុំនៅក្នុងVIPប្រជុំ', tts_status: 'synthesized' },
+    { id: 'line-1', start: '00:01:20', end: '00:01:25', speaker: 'Speaker 1', source: 'æ€»è£é©¾é©¶Kawasaki H2åŽ»è§æŽæ˜Ž', display: 'áž”áŸ’ážšáž’áž¶áž“áž€áŸ’ážšáž»áž˜áž áŸŠáž»áž“é©¾é©¶Kawasaki H2åŽ»è§æŽæ˜Ž', tts_status: 'pending' },
+    { id: 'line-2', start: '00:01:25', end: '00:01:30', speaker: 'Speaker 2', source: 'æˆ‘ä»¬å¿…é¡»åœ¨VIPä¼šè®®å®¤å¼€ä¼š', display: 'áž™áž¾áž„ážáŸ’ážšáž¼ážœážáŸ‚áž”áŸ’ážšáž‡áž»áŸ†áž“áŸ…áž€áŸ’áž“áž»áž„VIPáž”áŸ’ážšáž‡áž»áŸ†', tts_status: 'synthesized' },
   ]);
   const [glossary, setGlossary] = useState([
-    { id: 'g-1', source_term: '总裁', policy: 'TRANSLATE', display_name: 'ប្រធានក្រុមហ៊ុន', phonetic: '' },
-    { id: 'g-2', source_term: 'Kawasaki H2', policy: 'KEEP_ORIGINAL', display_name: 'Kawasaki H2', phonetic: 'កាវ៉ាសាគី អេច ពីរ' },
-    { id: 'g-3', source_term: '李明', policy: 'ROMANIZE_EN', display_name: 'Li Ming', phonetic: 'លី មីង' },
+    { id: 'g-1', source_term: 'æ€»è£', policy: 'TRANSLATE', display_name: 'áž”áŸ’ážšáž’áž¶áž“áž€áŸ’ážšáž»áž˜áž áŸŠáž»áž“', phonetic: '' },
+    { id: 'g-2', source_term: 'Kawasaki H2', policy: 'KEEP_ORIGINAL', display_name: 'Kawasaki H2', phonetic: 'áž€áž¶ážœáŸ‰áž¶ážŸáž¶áž‚áž¸ áž¢áŸáž… áž–áž¸ážš' },
+    { id: 'g-3', source_term: 'æŽæ˜Ž', policy: 'ROMANIZE_EN', display_name: 'Li Ming', phonetic: 'áž›áž¸ áž˜áž¸áž„' },
   ]);
 
   // Overlay / Thumbnail Editor state
@@ -71,6 +75,48 @@ export default function AppShell() {
   // Publish & Scheduler state
   const [publishPlatforms, setPublishPlatforms] = useState({ tiktok: true, youtube: true, telegram: false });
   const [scheduleTime, setScheduleTime] = useState('');
+
+  // Backend connection state
+  const [backendUrl, setBackendUrlState] = useState('');
+  const [backendUrlInput, setBackendUrlInput] = useState('');
+  const [backendStatus, setBackendStatus] = useState<'connected' | 'disconnected' | 'checking'>('checking');
+  const [showBackendSettings, setShowBackendSettings] = useState(false);
+
+  const checkBackendHealth = useCallback(async (url?: string) => {
+    const target = url ?? backendUrl;
+    if (!target) return false;
+    setBackendStatus('checking');
+    try {
+      const res = await fetch(`${target.replace(/\/$/, '')}/health`, { method: 'GET' });
+      const ok = res.ok;
+      setBackendStatus(ok ? 'connected' : 'disconnected');
+      return ok;
+    } catch {
+      setBackendStatus('disconnected');
+      return false;
+    }
+  }, [backendUrl]);
+
+  // Initialize backend URL from storage/env and poll health
+  useEffect(() => {
+    const initial = getBackendUrl();
+    setBackendUrlState(initial);
+    setBackendUrlInput(initial);
+    checkBackendHealth(initial);
+
+    const interval = setInterval(() => {
+      checkBackendHealth();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [checkBackendHealth]);
+
+  const saveBackendUrl = async () => {
+    const trimmed = backendUrlInput.trim().replace(/\/$/, '');
+    if (!trimmed) return;
+    setBackendUrl(trimmed);
+    setBackendUrlState(trimmed);
+    await checkBackendHealth(trimmed);
+  };
 
   // Load download jobs on mount and when project changes
   const loadDownloadJobs = useCallback(async () => {
@@ -327,13 +373,68 @@ export default function AppShell() {
         {/* Footer / System status */}
         <div className="p-4 border-t border-slate-800 bg-slate-900/50">
           <div className="flex items-center justify-between text-xs text-slate-400">
-            <span className="flex items-center space-x-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>API Connected</span>
-            </span>
+            <div className="flex items-center space-x-1.5">
+              {showBackendSettings ? (
+                <span className="text-indigo-400 text-xs">Settings</span>
+              ) : (
+                <button
+                  onClick={() => setShowBackendSettings(true)}
+                  className="flex items-center space-x-1 rounded-full px-2 py-1.5 text-slate-300 bg-slate-800/50 border border-slate-700/30"
+                  aria-label="Backend connection status"
+                >
+                  {backendStatus === 'connected' && (
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  )}
+                  {backendStatus === 'disconnected' && (
+                    <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                  )}
+                  {backendStatus === 'checking' && (
+                    <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                  )}
+                  <span>{backendStatus === 'connected' ? 'Connected' : backendStatus === 'disconnected' ? 'Disconnected' : 'Checking'}</span>
+                </button>
+              )}
+            </div>
             <span className="font-mono text-indigo-400">v1.0.0</span>
           </div>
         </div>
+
+        {/* Backend Connection Settings Modal */}
+        {showBackendSettings && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-6">
+              <h3 className="text-lg font-bold text-slate-100">Backend Connection Settings</h3>
+              <p className="text-sm text-slate-400">Enter your backend URL (Cloudflare Tunnel trycloudflare.com URL or http://127.0.0.1:8000).</p>
+              <form onSubmit={saveBackendUrl} className="space-y-4">
+                <div>
+                  <label className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">Backend URL</label>
+                  <input
+                    type="text"
+                    value={backendUrlInput}
+                    onChange={(e) => setBackendUrlInput(e.target.value)}
+                    placeholder="https://xxxxxxx.trycloudflare.com or http://127.0.0.1:8000"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div className="flex justify-end space-x-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowBackendSettings(false)}
+                    className="px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:bg-slate-800 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-lg text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20 transition-all"
+                  >
+                    Save & Test
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Main Content Area */}
@@ -343,8 +444,8 @@ export default function AppShell() {
           <div className="flex items-center space-x-3">
             <Sparkles className="w-5 h-5 text-indigo-400" />
             <h2 className="text-lg font-semibold text-slate-100 capitalize">
-              {activeTab === 'download' && 'Download Hub — Multi-Platform Ingestion'}
-              {activeTab === 'translate' && 'Translate & Dub Studio — Dual-Track & Voiceover'}
+              {activeTab === 'download' && 'Download Hub â€” Multi-Platform Ingestion'}
+              {activeTab === 'translate' && 'Translate & Dub Studio â€” Dual-Track & Voiceover'}
               {activeTab === 'overlay' && 'Overlay, Watermark & Thumbnail AI Editor'}
               {activeTab === 'export' && 'Export & Short Drama Splitter Studio'}
               {activeTab === 'publish' && 'Publish & Multi-Platform Scheduler'}
@@ -546,7 +647,7 @@ export default function AppShell() {
                     {transcriptLines.map((line, idx) => (
                       <div key={line.id} className="bg-slate-950 border border-slate-800 rounded-lg p-4 space-y-3">
                         <div className="flex items-center justify-between text-xs text-slate-400">
-                          <span className="font-mono text-indigo-400">{line.start} → {line.end} ({line.speaker})</span>
+                          <span className="font-mono text-indigo-400">{line.start} â†’ {line.end} ({line.speaker})</span>
                           <span className="px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
                             {line.tts_status}
                           </span>
