@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .routers import download, dubbing, overlay
-from .db.init_db import init_db
+from .init_db import init_db
 
 
 @asynccontextmanager
@@ -19,7 +19,11 @@ app = FastAPI(title="KhmerDub Studio API", lifespan=lifespan)
 # CORS for frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3002",
+        "https://rc-studio-sigma.vercel.app",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
